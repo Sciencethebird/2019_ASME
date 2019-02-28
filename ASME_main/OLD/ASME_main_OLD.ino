@@ -1,15 +1,18 @@
-
 #include <math.h>
 #include <PS2X_lib.h>
 #include <Servo.h>
 
 #define PI 3.14159265
 
-#define OPEN 1
-#define CLOSE 0
+#define STEP 0
+#define DIR 1
 
-#define PS2_DAT        8   //14
-#define PS2_CMD        9   //15
+#define CLOSE 0
+#define OPEN 1
+
+
+#define PS2_DAT        8  //14
+#define PS2_CMD        9  //15
 #define PS2_SEL        10  //16
 #define PS2_CLK        11  //17
 
@@ -20,22 +23,23 @@ const int motor_LB[3] = {47, 49, 5}; // (motor left  back)  IN1 IN2 ENA
 const int motor_RF[3] = {52, 50, 6}; // (motor right front) IN1 IN2 ENA
 const int motor_RB[3] = {48, 46, 7}; // (motor right back)  IN1 IN2 ENA
 
+/*
+  const int motor_RF[3] = {0, 0, 0}; // (motor left  front) IN1 IN2 ENA
+  const int motor_RB[3] = {0, 0, 0}; // (motor left  back)  IN1 IN2 ENA
+  const int motor_LF[3] = {52, 50, 0}; // (motor right front) IN1 IN2 ENA
+  const int motor_LB[3] = {48, 46, 0}; // (motor right back)  IN1 IN2 ENA
+*/
 const int stpr_L[2] = {44, 42};
 const int stpr_R[2] = {40, 38};
 
-const int stpr_state_out = 36;
-const int servo_state_out = 38;
-
-const int stpr_L_tweak_out[2] = {32, 33};
-const int stpr_R_tweak_out[2] = {26, 27};
-
-const int stpr_enable[2] = {22, 24};
-
-//*********************** function declaration *****************************//
+//*********************** function declaration *****************************
 void ps2_setup();
 void motorstop();
 void motorrun(int, int, int); //type, power, yaw
 void motorspin(int); ///???
+
+void stpr_rotate(const int stpr[2], int, int);
+void servo_action(int); // action
 
 float Polar_Angle(float, float);  //y, x
 float Polar_Length(float, float);
@@ -44,11 +48,13 @@ int error = 0; // ps2 controller status
 byte type = 0;
 byte vibrate = 0;
 
-bool stpr_enable_state = false;
+int pos = 0; // servo and stepper motor status
+bool gate_is_open = false;
+bool bottom_is_open = false;
 
 PS2X ps2x;
+Servo servo_A;
 
-//*********************** setup *****************************//
 void setup() {
 
   Serial.begin(38400);
@@ -67,34 +73,21 @@ void setup() {
   // stepper motors
   for (int i = 0; i < 2; i++) pinMode(stpr_L[i], OUTPUT);
   for (int i = 0; i < 2; i++) pinMode(stpr_R[i], OUTPUT);
-  for (int i = 0; i < 2; i++) pinMode(stpr_enable[i], OUTPUT);
 
-
-  // Slave Signal
-  pinMode(stpr_state_out, OUTPUT);
-  pinMode(servo_state_out, OUTPUT);
-
-  for (int i = 0; i < 2; i++) pinMode(stpr_L_tweak_out[i], OUTPUT);
-  for (int i = 0; i < 2; i++) pinMode(stpr_R_tweak_out[i], OUTPUT);
-
-  // prevent random movemont
+  servo_A.attach(3);
+  servo_A.write(0);
   motorstop();
-  digitalWrite(stpr_state_out, LOW);
-  digitalWrite(servo_state_out, LOW);
-  for (int i = 0; i < 2; i++) digitalWrite(stpr_L_tweak_out[i], LOW);
-  for (int i = 0; i < 2; i++) digitalWrite(stpr_R_tweak_out[i], LOW);
-  for (int i = 0; i < 2; i++) digitalWrite(stpr_enable[i], LOW);
 }
 
 void loop() {
 
 
-  bool motorstate = 0;
+  bool motorstate = 0; /// ????
 
   float left_joystick_angle = 0;
   float left_joystick_length = 0;
 
-  ps2x.read_gamepad(false, vibrate);
+  ps2x.read_gamepad(false, vibrate);  //read controller, **** args to be determined
   delay(100);
 
   int ly = (int)ps2x.Analog(PSS_LY);
@@ -110,121 +103,102 @@ void loop() {
   ly == 0 ? ly = 1 : 1;
   rx == 1 ? rx = 0 : 1; // if rx == 1 then rx = 0, else do nothing
 
-  if (ps2x.ButtonPressed(PSB_SQUARE)) return; /// if square is pressed -> noise
-
   if (lx == 1 && ly == 1) {
     motorstate = 0;
+
   } else {
     motorstate = 1;
-    if ( ps2x.ButtonPressed(PSB_SQUARE) ) motorstate = 0; // prevent random movement
     left_joystick_angle  = Polar_Angle(static_cast<float>(lx), static_cast<float>(ly));
     left_joystick_length = Polar_Length(static_cast<float>(lx), static_cast<float>(ly));
   }
 
-  /// servo and stepper control signal
-  if (ps2x.ButtonPressed(PSB_CIRCLE) ) {
-    digitalWrite(servo_state_out, HIGH);
-    delay(25);
-    Serial.println("Circle just pressed");
-  } else if (ps2x.ButtonPressed(PSB_TRIANGLE) ) {
-    digitalWrite(stpr_state_out, HIGH);
-    delay(25);
-    Serial.println("Triangle just pressed");
-  } else {
-    digitalWrite(stpr_state_out, LOW);
-    digitalWrite(servo_state_out, LOW);
-    delay(25);
-  }
-
-  /// stepper enable
-  if (ps2x.ButtonPressed(PSB_CROSS)) {
-    if (stpr_enable_state) {
-      stpr_enable_state = false;
-      for (int i = 0; i < 2; i++) digitalWrite(stpr_enable[i], LOW);
-    } else {
-      stpr_enable_state = true; /// stops both stepper motor
-      for (int i = 0; i < 2; i++) digitalWrite(stpr_enable[i], HIGH);
-    }
-  }
-
-  /// stepper tweak
-  if (ps2x.ButtonPressed(PSB_PAD_UP)) {
-    digitalWrite(stpr_L_tweak_out[OPEN], HIGH);
-    Serial.println("PSB_UP just pressed");
-    delay(25);
-  } else if (ps2x.ButtonPressed(PSB_PAD_DOWN)) {
-    digitalWrite(stpr_L_tweak_out[CLOSE], HIGH);
-    Serial.println("PSB_DOWN just pressed");
-    delay(25);
-  } else if (ps2x.ButtonPressed(PSB_PAD_LEFT)) {
-    digitalWrite(stpr_R_tweak_out[CLOSE], HIGH);
-    delay(25);
-  } else if (ps2x.ButtonPressed(PSB_PAD_RIGHT)) {
-    digitalWrite(stpr_R_tweak_out[OPEN], HIGH);
-    delay(25);
-  } else {
-    for (int i = 0; i < 2; i++) digitalWrite(stpr_L_tweak_out[i], LOW);
-    for (int i = 0; i < 2; i++) digitalWrite(stpr_R_tweak_out[i], LOW);
-    delay(25);
-  }
-
-  /// spin motion
-  if (rx > 10) {
-    motorspin(200);
-    delay(25);
-    return;
-  }
-  if (rx < -10) {
-    motorspin(-200);
-    delay(25);
-    return;
-  }
-
-  /// forward backward right left
   if (motorstate == 0) {
     motorstop();
+    //if (PSB_PAD_UP)         motorrun(1, 50, rx);
+    //else if (PSB_PAD_DOWN)  motorrun(3, 50, rx);
+    //else if (PSB_PAD_RIGHT) motorrun(0, 50, rx);
+    //else if (PSB_PAD_LEFT)  motorrun(2, 50, rx);
+
+
+
   } else {
     rx = map(rx, -200, 200, -25, 25);
 
     if (left_joystick_angle < 22.5 || left_joystick_angle >= 337.5) {
 
-      motorrun(2, left_joystick_length < 250 ? left_joystick_length : 250, rx); // go right
+      motorrun(0, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go right
 
     } else if (left_joystick_angle >= 67.5 && left_joystick_angle < 112.5) {
 
-      motorrun(1, left_joystick_length < 250 ? left_joystick_length : 250, rx); // go straight
+      motorrun(1, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go straight
 
     } else if (left_joystick_angle >= 157.5 && left_joystick_angle < 202.5) {
 
-      motorrun(0, left_joystick_length < 250 ? left_joystick_length : 250, rx); // go left
+      motorrun(2, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go left
 
     } else if (left_joystick_angle >= 247.5 && left_joystick_angle < 292.5) {
 
-      motorrun(3, left_joystick_length < 250 ? left_joystick_length : 250, rx); // go back
+      motorrun(3, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go back
 
     } else if (left_joystick_angle >= 22.5 && left_joystick_angle < 67.5) {
 
-      //motorrun(4, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go rightfront
+      motorrun(4, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go rightfront
 
     } else if (left_joystick_angle >= 112.5 && left_joystick_angle < 157.5) {
 
-      //motorrun(5, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go leftfront
+      motorrun(5, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go leftfront
 
     } else if (left_joystick_angle >= 202.5 && left_joystick_angle < 247.5) {
 
-      //motorrun(6, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go leftback
+      motorrun(6, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go leftback
     } else if (left_joystick_angle >= 292.5 && left_joystick_angle < 337.5) {
 
-      //motorrun(7, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go rightback
+      motorrun(7, left_joystick_length < 200 ? left_joystick_length : 200, rx); // go rightback
     }
-    delay(50);
+    delay(50);//////   good change?
+    return;
   }
+
+  /// servo
+  if (ps2x.ButtonPressed(PSB_CIRCLE) && !ps2x.ButtonPressed(PSB_SQUARE)) {
+
+    if (gate_is_open) {
+      servo_action(CLOSE);
+      gate_is_open = false;
+    } else {
+      servo_action(OPEN);
+      gate_is_open = true;
+    }
+    Serial.println("Circle just pressed");
+    delay(100);
+  }
+
+  /// stepper motor
+
+  if (ps2x.ButtonPressed(PSB_TRIANGLE) && !ps2x.ButtonPressed(PSB_CIRCLE)) {
+
+    if (bottom_is_open) {
+      stpr_action(CLOSE, 20000);
+      bottom_is_open = false;
+    } else {
+      stpr_action(OPEN, 20000);
+      bottom_is_open = true;
+    }
+    Serial.println("Triangle just pressed");
+    delay(100);
+    //stpr_action(OPEN, 20000);
+  }
+
 }
+
+
+
+
+
 
 
 //****************** function implementation ********************//
 
-// helper functions
 float Polar_Angle(float x, float y) {
   if (x > 0 && y > 0) return atan((float)y / (float)x) * 180 / PI;
   else if (x < 0) return atan((float)y / (float)x) * 180 / PI + 180;
@@ -234,7 +208,7 @@ float Polar_Length(float x, float y) {
   return sqrt(x * x + y * y);
 };
 
-// dc motor controll
+
 void motorstop() {
   for (int i = 0; i < 2; i++) digitalWrite(motor_RF[i], 0);
   for (int i = 0; i < 2; i++) digitalWrite(motor_RB[i], 0);
@@ -242,13 +216,14 @@ void motorstop() {
   for (int i = 0; i < 2; i++) digitalWrite(motor_LB[i], 0);
 };
 
+
 void motorrun(int type, int power , int yaw) {
   switch (type) {
     case 0:                                //right
-      analogWrite(motor_LB[2], 200);
-      analogWrite(motor_LF[2], 200);
-      analogWrite(motor_RF[2], 200);
-      analogWrite(motor_RB[2], 200);
+      analogWrite(motor_LB[2], power);
+      analogWrite(motor_LF[2], power);
+      analogWrite(motor_RF[2], power);
+      analogWrite(motor_RB[2], power);
       digitalWrite(motor_RF[0], 0);
       digitalWrite(motor_RF[1], 1);
       digitalWrite(motor_RB[0], 1);
@@ -273,10 +248,10 @@ void motorrun(int type, int power , int yaw) {
       digitalWrite(motor_LB[1], 0);
       break;
     case 2:                                 //left
-      analogWrite(motor_LB[2], 200);
-      analogWrite(motor_LF[2], 200);
-      analogWrite(motor_RF[2], 200);
-      analogWrite(motor_RB[2], 200);
+      analogWrite(motor_LB[2], power);
+      analogWrite(motor_LF[2], power);
+      analogWrite(motor_RF[2], power);
+      analogWrite(motor_RB[2], power);
       digitalWrite(motor_RF[0], 1);
       digitalWrite(motor_RF[1], 0);
       digitalWrite(motor_RB[0], 0);
@@ -359,6 +334,7 @@ void motorrun(int type, int power , int yaw) {
   }
 }
 
+
 void motorspin(int yaw) {
   if (yaw == 0)
     motorstop();
@@ -392,6 +368,8 @@ void motorspin(int yaw) {
     analogWrite(motor_RB[2], yaw);
   }
 }
+
+
 
 
 void ps2_setup() {
@@ -432,7 +410,6 @@ void ps2_setup() {
       break;
   }
 }
-
 
 
 

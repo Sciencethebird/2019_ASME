@@ -76,19 +76,19 @@ void loop() {
 
   for (int i = 0; i < 256; i++) {
 
-    analogWrite(motorIn3, 200);
-    analogWrite(motorIn4, 0);
+    //analogWrite(motorIn3, 200);
+    //analogWrite(motorIn4, 0);
 
-    analogWrite(motorIn1, 200);
-    analogWrite(motorIn2, 0);
+    //analogWrite(motorIn1, 200);
+    //analogWrite(motorIn2, 0);
 
-    analogWrite(motorIn5, 200);
-    analogWrite(motorIn6, 0);
+   // analogWrite(motorIn5, 200);
+   // analogWrite(motorIn6, 0);
 
-    analogWrite(motorIn7, 200);
-    analogWrite(motorIn8, 0);
+   // analogWrite(motorIn7, 200);
+   // analogWrite(motorIn8, 0);
 
-    delay(10);
+   // delay(10);
   }
 
   stpr_rotate(stprA_dir, stprA_step, cw, 20000);
