@@ -20,8 +20,6 @@ const int motor_LB[3] = {47, 49, 5}; // (motor left  back)  IN1 IN2 ENA
 const int motor_RF[3] = {52, 50, 6}; // (motor right front) IN1 IN2 ENA
 const int motor_RB[3] = {48, 46, 7}; // (motor right back)  IN1 IN2 ENA
 
-const int stpr_L[2] = {44, 42};
-const int stpr_R[2] = {40, 38};
 
 const int stpr_state_out = 36;
 const int servo_state_out = 38;
@@ -64,16 +62,12 @@ void setup() {
   for (int i = 0; i < 3; i++) pinMode(motor_RF[i], OUTPUT);
   for (int i = 0; i < 3; i++) pinMode(motor_RB[i], OUTPUT);
 
-  // stepper motors
-  for (int i = 0; i < 2; i++) pinMode(stpr_L[i], OUTPUT);
-  for (int i = 0; i < 2; i++) pinMode(stpr_R[i], OUTPUT);
-  for (int i = 0; i < 2; i++) pinMode(stpr_enable[i], OUTPUT);
-
-
   // Slave Signal
-  pinMode(stpr_state_out, OUTPUT);
+  
   pinMode(servo_state_out, OUTPUT);
-
+  
+  pinMode(stpr_state_out, OUTPUT);
+  for (int i = 0; i < 2; i++) pinMode(stpr_enable[i], OUTPUT);
   for (int i = 0; i < 2; i++) pinMode(stpr_L_tweak_out[i], OUTPUT);
   for (int i = 0; i < 2; i++) pinMode(stpr_R_tweak_out[i], OUTPUT);
 
@@ -110,7 +104,7 @@ void loop() {
   ly == 0 ? ly = 1 : 1;
   rx == 1 ? rx = 0 : 1; // if rx == 1 then rx = 0, else do nothing
 
-  if (ps2x.ButtonPressed(PSB_SQUARE)) return; /// if square is pressed -> noise
+  if (ps2x.ButtonPressed(PSB_SQUARE)) return; /// if square is pressed means noise
 
   if (lx == 1 && ly == 1) {
     motorstate = 0;
@@ -173,8 +167,7 @@ void loop() {
     motorspin(200);
     delay(25);
     return;
-  }
-  if (rx < -10) {
+  } else if (rx < -10) {
     motorspin(-200);
     delay(25);
     return;
