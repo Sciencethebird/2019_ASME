@@ -91,6 +91,8 @@ void loop() {
   ps2x.read_gamepad(false, vibrate);
   delay(100);
 
+  if (ps2x.ButtonPressed(PSB_SQUARE)) return; /// if square is pressed means noise
+
   int ly = (int)ps2x.Analog(PSS_LY);
   int lx = (int)ps2x.Analog(PSS_LX);
   int rx =  (int)ps2x.Analog(PSS_RX); // rx control spin
@@ -104,13 +106,11 @@ void loop() {
   ly == 0 ? ly = 1 : 1;
   rx == 1 ? rx = 0 : 1; // if rx == 1 then rx = 0, else do nothing
 
-  if (ps2x.ButtonPressed(PSB_SQUARE)) return; /// if square is pressed means noise
 
   if (lx == 1 && ly == 1) {
     motorstate = 0;
   } else {
     motorstate = 1;
-    if ( ps2x.ButtonPressed(PSB_SQUARE) ) motorstate = 0; // prevent random movement
     left_joystick_angle  = Polar_Angle(static_cast<float>(lx), static_cast<float>(ly));
     left_joystick_length = Polar_Length(static_cast<float>(lx), static_cast<float>(ly));
   }
@@ -119,11 +119,11 @@ void loop() {
   if (ps2x.ButtonPressed(PSB_CIRCLE) ) {
     digitalWrite(servo_state_out, HIGH);
     delay(25);
-    Serial.println("Circle just pressed");
+    //Serial.println("Circle just pressed");
   } else if (ps2x.ButtonPressed(PSB_TRIANGLE) ) {
     digitalWrite(stpr_state_out, HIGH);
     delay(25);
-    Serial.println("Triangle just pressed");
+    //Serial.println("Triangle just pressed");
   } else {
     digitalWrite(stpr_state_out, LOW);
     digitalWrite(servo_state_out, LOW);
