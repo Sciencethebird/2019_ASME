@@ -91,7 +91,7 @@ void loop() {
   ps2x.read_gamepad(false, vibrate);
   delay(100);
 
-  if (ps2x.ButtonPressed(PSB_SQUARE)) return; /// if square is pressed means noise
+  if (ps2x.ButtonPressed(PSB_SQUARE) && ps2x.ButtonPressed(PSB_CIRCLE)) return; /// if square is pressed means noise
 
   int ly = (int)ps2x.Analog(PSS_LY);
   int lx = (int)ps2x.Analog(PSS_LX);
